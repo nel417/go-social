@@ -30,7 +30,11 @@ func main() {
 	r.HandleFunc("/", indexPostHandler).Methods("POST")
 	//handles the home response
 	http.Handle("/", r)
-	//makes server
+
+	//static file instantiation
+	fs := http.FileServer(http.Dir("./static/"))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+	//create server
 	http.ListenAndServe(":8080", nil)
 
 }
