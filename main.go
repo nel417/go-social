@@ -1,18 +1,13 @@
 package main
 
 import (
-	"context"
 	"html/template"
 	"net/http"
 
-	"github.com/go-redis/redis"
+	"./models"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
-	"golang.org/x/crypto/bcrypt"
 )
-
-//global redis client
-var client *redis.Client
 
 //global template
 var templates *template.Template
@@ -21,10 +16,7 @@ var templates *template.Template
 var store = sessions.NewCookieStore([]byte("secret-lol"))
 
 func main() {
-	//redis client and host
-	client = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	models.Init()
 	// render templates in templates folder
 	templates = template.Must(template.ParseGlob("templates/*.html"))
 	//initialzie mux router
@@ -67,10 +59,8 @@ func AuthRequired(handler http.HandlerFunc) http.HandlerFunc {
 // INDEX AREA
 func indexGetHandler(w http.ResponseWriter, r *http.Request) {
 
-	// define context
-	ctx := context.TODO()
 	//comments and error handling
-	comments, err := client.LRange(ctx, "comments", 0, 10).Result()
+	comments, err := models.GetComments()
 	//error handling
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -84,12 +74,10 @@ func indexGetHandler(w http.ResponseWriter, r *http.Request) {
 func indexPostHandler(w http.ResponseWriter, r *http.Request) {
 	//parses form from the request body
 	r.ParseForm()
-	//define context
-	ctx := context.TODO()
 	//hits comment name in html
 	comment := r.PostForm.Get("comment")
 	//pushes to redis db
-	err := client.LPush(ctx, "comments", comment).Err()
+	err := models.PostComment(comment)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal Server Error"))
@@ -108,23 +96,22 @@ func loginPostHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
-	ctx := context.TODO()
-	hash, err := client.Get(ctx, "user:"+username).Bytes()
-	if err == redis.Nil {
-		templates.ExecuteTemplate(w, "login.html", "Unknown User")
-		return
+	err := models.AuthenticateUser(username, password)
 
-	} else if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal Server Error"))
-		return
-	}
-
-	err = bcrypt.CompareHashAndPassword(hash, []byte(password))
 	if err != nil {
-		templates.ExecuteTemplate(w, "login.html", "Invalid Login")
+		switch err {
+		case models.ErrUserNotFound:
+			templates.ExecuteTemplate(w, "login.html", "Unknown User")
+		case models.ErrInvalidLogin:
+			templates.ExecuteTemplate(w, "login.html", "Invalid Login")
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("internal Server Error"))
+
+		}
 		return
 	}
+
 	//gets session
 	session, _ := store.Get(r, "session")
 	//sets session
@@ -144,15 +131,8 @@ func registerPostHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
-	cost := bcrypt.DefaultCost
-	ctx := context.TODO()
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal Server Error"))
-		return
-	}
-	err = client.Set(ctx, "user:"+username, hash, 0).Err()
+	err := models.RegisterUser(username, password)
+
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal Server Error"))
