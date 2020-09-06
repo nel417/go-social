@@ -38,6 +38,12 @@ func NewUser(username string, hash []byte) (*User, error) {
 	return &User{key}, nil
 }
 
+func (user *User) GetId() (int64, error) {
+	ctx := context.TODO()
+
+	return client.HGet(ctx, user.key, "id").Int64()
+}
+
 func (user *User) GetUsername() (string, error) {
 	ctx := context.TODO()
 
@@ -60,7 +66,11 @@ func (user *User) Authenticate(password string) error {
 		return ErrInvalidLogin
 	}
 	return err
+}
 
+func GetUserById(id int64) (*User, error) {
+	key := fmt.Sprintf("user:%d", id)
+	return &User{key}, nil
 }
 
 func GetUserByUsername(username string) (*User, error) {
@@ -69,28 +79,23 @@ func GetUserByUsername(username string) (*User, error) {
 	id, err := client.HGet(ctx, "user:by-username", username).Int64()
 	if err == redis.Nil {
 		return nil, ErrUserNotFound
-
 	} else if err != nil {
 		return nil, err
 	}
-	key := fmt.Sprintf("user:%d", id)
-	return &User{key}, nil
-
+	return GetUserById(id)
 }
 
-func AuthenticateUser(username, password string) error {
+func AuthenticateUser(username, password string) (*User, error) {
 	user, err := GetUserByUsername(username)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return user.Authenticate(password)
-
+	return user, user.Authenticate(password)
 }
 
 func RegisterUser(username, password string) error {
 	cost := bcrypt.DefaultCost
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
-
 	if err != nil {
 		return err
 	}

@@ -12,57 +12,47 @@ import (
 
 func NewRouter() *mux.Router {
 	r := mux.NewRouter()
-	//get route for home
 	r.HandleFunc("/", middleware.AuthRequired(indexGetHandler)).Methods("GET")
-	//post route for index
 	r.HandleFunc("/", middleware.AuthRequired(indexPostHandler)).Methods("POST")
-	//get route for login
 	r.HandleFunc("/login", loginGetHandler).Methods("GET")
-	//post route for login
 	r.HandleFunc("/login", loginPostHandler).Methods("POST")
-	//get route for register
 	r.HandleFunc("/register", registerGetHandler).Methods("GET")
-	//post route for register
 	r.HandleFunc("/register", registerPostHandler).Methods("POST")
-
-	//static file instantiation
 	fs := http.FileServer(http.Dir("./static/"))
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
 	return r
 }
 
-// INDEX AREA
 func indexGetHandler(w http.ResponseWriter, r *http.Request) {
-
-	//comments and error handling
-	comments, err := models.GetComments()
-	//error handling
+	updates, err := models.GetUpdates()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal Server Error"))
+		w.Write([]byte("Internal server error"))
 		return
 	}
-	//executes template, index.html
-	utils.ExecuteTemplate(w, "index.html", comments)
+	utils.ExecuteTemplate(w, "index.html", updates)
 }
 
 func indexPostHandler(w http.ResponseWriter, r *http.Request) {
-	//parses form from the request body
-	r.ParseForm()
-	//hits comment name in html
-	comment := r.PostForm.Get("comment")
-	//pushes to redis db
-	err := models.PostComment(comment)
-	if err != nil {
+	session, _ := sessions.Store.Get(r, "session")
+	untypedUserId := session.Values["user_id"]
+	userId, ok := untypedUserId.(int64)
+	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal Server Error"))
+		w.Write([]byte("Internal server error"))
 		return
 	}
-	//redirects to home page with new comment in array
+	r.ParseForm()
+	body := r.PostForm.Get("update")
+	err := models.PostUpdate(userId, body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal server error"))
+		return
+	}
 	http.Redirect(w, r, "/", 302)
 }
 
-// LOGIN AREA
 func loginGetHandler(w http.ResponseWriter, r *http.Request) {
 	utils.ExecuteTemplate(w, "login.html", nil)
 }
@@ -71,35 +61,33 @@ func loginPostHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
-	err := models.AuthenticateUser(username, password)
-
+	user, err := models.AuthenticateUser(username, password)
 	if err != nil {
 		switch err {
 		case models.ErrUserNotFound:
-			utils.ExecuteTemplate(w, "login.html", "Unknown User")
+			utils.ExecuteTemplate(w, "login.html", "unknown user")
 		case models.ErrInvalidLogin:
-			utils.ExecuteTemplate(w, "login.html", "Invalid Login")
+			utils.ExecuteTemplate(w, "login.html", "invalid login")
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("internal Server Error"))
-
+			w.Write([]byte("Internal server error"))
 		}
 		return
 	}
-
-	//gets session
+	userId, err := user.GetId()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal server error"))
+		return
+	}
 	session, _ := sessions.Store.Get(r, "session")
-	//sets session
-	session.Values["username"] = username
+	session.Values["user_id"] = userId
 	session.Save(r, w)
-	//redirects to index
 	http.Redirect(w, r, "/", 302)
-
 }
 
 func registerGetHandler(w http.ResponseWriter, r *http.Request) {
 	utils.ExecuteTemplate(w, "register.html", nil)
-
 }
 
 func registerPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -107,12 +95,10 @@ func registerPostHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
 	err := models.RegisterUser(username, password)
-
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal Server Error"))
+		w.Write([]byte("Internal server error"))
 		return
 	}
-	//redirects to login
 	http.Redirect(w, r, "/login", 302)
 }
