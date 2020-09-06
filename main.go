@@ -66,6 +66,8 @@ func indexGetHandler(w http.ResponseWriter, r *http.Request) {
 	comments, err := client.LRange(ctx, "comments", 0, 10).Result()
 	//error handling
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal Server Error"))
 		return
 	}
 	//executes template, index.html
@@ -80,7 +82,12 @@ func indexPostHandler(w http.ResponseWriter, r *http.Request) {
 	//hits comment name in html
 	comment := r.PostForm.Get("comment")
 	//pushes to redis db
-	client.LPush(ctx, "comments", comment)
+	err := client.LPush(ctx, "comments", comment).Err()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal Server Error"))
+		return
+	}
 	//redirects to home page with new comment in array
 	http.Redirect(w, r, "/", 302)
 }
@@ -89,17 +96,26 @@ func indexPostHandler(w http.ResponseWriter, r *http.Request) {
 func loginGetHandler(w http.ResponseWriter, r *http.Request) {
 	templates.ExecuteTemplate(w, "login.html", nil)
 }
+
 func loginPostHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
 	ctx := context.TODO()
 	hash, err := client.Get(ctx, "user:"+username).Bytes()
-	if err != nil {
+	if err == redis.Nil {
+		templates.ExecuteTemplate(w, "login.html", "Unknown User")
+		return
+
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal Server Error"))
 		return
 	}
+
 	err = bcrypt.CompareHashAndPassword(hash, []byte(password))
 	if err != nil {
+		templates.ExecuteTemplate(w, "login.html", "Invalid Login")
 		return
 	}
 	//gets session
@@ -125,9 +141,16 @@ func registerPostHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.TODO()
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal Server Error"))
 		return
 	}
-	client.Set(ctx, "user:"+username, hash, 0)
+	err = client.Set(ctx, "user:"+username, hash, 0).Err()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal Server Error"))
+		return
+	}
 	//redirects to login
 	http.Redirect(w, r, "/login", 302)
 }

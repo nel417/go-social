@@ -8,6 +8,9 @@
 </head>
 
 <body>
+	{{if .}}
+	<div class="error"> {{.}}</div>
+	{{end}}
 	<form method="POST">
 		<div>Username: <input type="text" name="username"></div>
 		<div>Password: <input type="text" name="password"></div>
