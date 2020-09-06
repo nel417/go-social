@@ -30,9 +30,9 @@ func main() {
 	//initialzie mux router
 	r := mux.NewRouter()
 	//get route for home
-	r.HandleFunc("/", indexGetHandler).Methods("GET")
+	r.HandleFunc("/", AuthRequired(indexGetHandler)).Methods("GET")
 	//post route for index
-	r.HandleFunc("/", indexPostHandler).Methods("POST")
+	r.HandleFunc("/", AuthRequired(indexPostHandler)).Methods("POST")
 	//get route for login
 	r.HandleFunc("/login", loginGetHandler).Methods("GET")
 	//post route for login
@@ -52,14 +52,21 @@ func main() {
 
 }
 
+func AuthRequired(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		session, _ := store.Get(r, "session")
+		_, ok := session.Values["username"]
+		if !ok {
+			http.Redirect(w, r, "/login", 302)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}
+}
+
 // INDEX AREA
 func indexGetHandler(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session")
-	_, ok := session.Values["username"]
-	if !ok {
-		http.Redirect(w, r, "/login", 302)
-		return
-	}
+
 	// define context
 	ctx := context.TODO()
 	//comments and error handling
