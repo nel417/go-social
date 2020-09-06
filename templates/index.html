@@ -8,7 +8,14 @@
 </head>
 
 <body>
-	<h1>hahahah</h1>
+	<h1>comment area</h1>
+
+	<form method="POST">
+		<textarea name="comment"></textarea>
+		<div>
+			<button type="submit">Post A Comment!</button>
+		</div>
+	</form>
 	{{range .}}
 	<div>{{.}}</div>
 	{{end}}
