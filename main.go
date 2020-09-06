@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 )
 
 //global redis client
@@ -14,6 +15,9 @@ var client *redis.Client
 
 //global template
 var templates *template.Template
+
+//byte array for keys
+var store = sessions.NewCookieStore([]byte("secret-lol"))
 
 func main() {
 	//redis client and host
@@ -28,7 +32,15 @@ func main() {
 	r.HandleFunc("/", indexGetHandler).Methods("GET")
 	//post route for index
 	r.HandleFunc("/", indexPostHandler).Methods("POST")
+	//post route for login
+	r.HandleFunc("/login", loginGetHandler).Methods("GET")
+	//get route for login
+	r.HandleFunc("/login", loginPostHandler).Methods("POST")
 	//handles the home response
+
+	//this was to test the cookie
+	// r.HandleFunc("/test", testGetHandler).Methods("GET")
+
 	http.Handle("/", r)
 
 	//static file instantiation
@@ -39,6 +51,7 @@ func main() {
 
 }
 
+// INDEX AREA
 func indexGetHandler(w http.ResponseWriter, r *http.Request) {
 	// define context
 	ctx := context.TODO()
@@ -64,3 +77,29 @@ func indexPostHandler(w http.ResponseWriter, r *http.Request) {
 	//redirects to home page with new comment in array
 	http.Redirect(w, r, "/", 302)
 }
+
+// LOGIN AREA
+func loginGetHandler(w http.ResponseWriter, r *http.Request) {
+	templates.ExecuteTemplate(w, "login.html", nil)
+}
+func loginPostHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	username := r.PostForm.Get("username")
+	session, _ := store.Get(r, "session")
+	session.Values["username"] = username
+	session.Save(r, w)
+}
+
+//COOKIE TEST
+// func testGetHandler(w http.ResponseWriter, r *http.Request) {
+// 	session, _ := store.Get(r, "session")
+// 	untyped, ok := session.Values["username"]
+// 	if !ok {
+// 		return
+// 	}
+// 	username, ok := untyped.(string)
+// 	if !ok {
+// 		return
+// 	}
+// 	w.Write([]byte(username))
+// }
