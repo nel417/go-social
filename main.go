@@ -8,6 +8,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //global redis client
@@ -32,15 +33,15 @@ func main() {
 	r.HandleFunc("/", indexGetHandler).Methods("GET")
 	//post route for index
 	r.HandleFunc("/", indexPostHandler).Methods("POST")
-	//post route for login
-	r.HandleFunc("/login", loginGetHandler).Methods("GET")
 	//get route for login
+	r.HandleFunc("/login", loginGetHandler).Methods("GET")
+	//post route for login
 	r.HandleFunc("/login", loginPostHandler).Methods("POST")
-	//handles the home response
-
-	//this was to test the cookie
-	// r.HandleFunc("/test", testGetHandler).Methods("GET")
-
+	//get route for register
+	r.HandleFunc("/register", registerGetHandler).Methods("GET")
+	//post route for register
+	r.HandleFunc("/register", registerPostHandler).Methods("POST")
+	//handle index route
 	http.Handle("/", r)
 
 	//static file instantiation
@@ -53,6 +54,12 @@ func main() {
 
 // INDEX AREA
 func indexGetHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session")
+	_, ok := session.Values["username"]
+	if !ok {
+		http.Redirect(w, r, "/login", 302)
+		return
+	}
 	// define context
 	ctx := context.TODO()
 	//comments and error handling
@@ -85,21 +92,42 @@ func loginGetHandler(w http.ResponseWriter, r *http.Request) {
 func loginPostHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	username := r.PostForm.Get("username")
+	password := r.PostForm.Get("password")
+	ctx := context.TODO()
+	hash, err := client.Get(ctx, "user:"+username).Bytes()
+	if err != nil {
+		return
+	}
+	err = bcrypt.CompareHashAndPassword(hash, []byte(password))
+	if err != nil {
+		return
+	}
+	//gets session
 	session, _ := store.Get(r, "session")
+	//sets session
 	session.Values["username"] = username
 	session.Save(r, w)
+	//redirects to index
+	http.Redirect(w, r, "/", 302)
+
 }
 
-//COOKIE TEST
-// func testGetHandler(w http.ResponseWriter, r *http.Request) {
-// 	session, _ := store.Get(r, "session")
-// 	untyped, ok := session.Values["username"]
-// 	if !ok {
-// 		return
-// 	}
-// 	username, ok := untyped.(string)
-// 	if !ok {
-// 		return
-// 	}
-// 	w.Write([]byte(username))
-// }
+func registerGetHandler(w http.ResponseWriter, r *http.Request) {
+	templates.ExecuteTemplate(w, "register.html", nil)
+
+}
+
+func registerPostHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	username := r.PostForm.Get("username")
+	password := r.PostForm.Get("password")
+	cost := bcrypt.DefaultCost
+	ctx := context.TODO()
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
+	if err != nil {
+		return
+	}
+	client.Set(ctx, "user:"+username, hash, 0)
+	//redirects to login
+	http.Redirect(w, r, "/login", 302)
+}
